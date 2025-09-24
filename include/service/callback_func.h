@@ -34,6 +34,7 @@
 #include <stdarg.h>
 #include "iota_init.h"
 #include "json_util.h"
+#include "securec.h"
 #include "base.h"
 
 typedef void (*LOG_CALLBACK_HANDLER)(int level, char *format, va_list args);
@@ -119,6 +120,8 @@ void SetEvenOtaVersionUpCallback(OTAVERSION_CALLBACK_HANDLER_SPECIFY callbackHan
 typedef void (*OTAURL_CALLBACK_HANDLER_SPECIFY)(char *objectDeviceId, int event_type, EN_IOTA_OTA_PARAS *ota_paras);
 void SetEvenOtaUrlResponseCallback(OTAURL_CALLBACK_HANDLER_SPECIFY callbackHandler);
 
+void SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler);
+
 // 事件细分回调函数
 typedef struct {
     // get information of memory
@@ -139,5 +142,16 @@ typedef struct {
     void (*onDeviceVersionUp)(char *objectDeviceId); // ota版本上报回调
     void (*onUrlResponse)(char *objectDeviceId, HW_INT event_type, EN_IOTA_OTA_PARAS *ota_paras); // ota获取平台url回调
 } TagOtaOps;
+
+#define SAFE_MALLOC(ptr, type) \
+    do { \
+        ptr = (type *)malloc(sizeof(type)); \
+        if (ptr == NULL) { \
+            PrintfLog(EN_LOG_LEVEL_ERROR, "%s: Memory allocation failed for " #ptr "\n", __func__); \
+            return -1; \
+        } \
+        memset_s(ptr, sizeof(type), 0, sizeof(type)); \
+    } while (0)
+
 
 #endif /* CALLBACK_FUNC_H */

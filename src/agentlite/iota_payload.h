@@ -138,12 +138,35 @@ char *IOTA_DelSubDevicePayload(ST_IOTA_DEL_SUB_DEVICE *delSubDevices, HW_INT dev
 char *IOTA_OTAVersionReportPayload(ST_IOTA_OTA_VERSION_INFO otaVersionInfo);
 
 /**
+* @brief Report the Module OTA version information.
+*
+* @param[in] moduleOtaVersionInfo Pointer to the OTA version information structure.
+* @return Pointer to the payload string.
+*/
+char *IOTA_ModuleOtaVersionReportPayload(ST_IOTA_MODULE_OTA_VERSION_INFO moduleOtaVersionInfo);
+/**
 * @brief Report the OTA upgrade status information.
 *
 * @param[in] otaStatusInfo Pointer to the OTA upgrade status information structure.
 * @return Pointer to the payload string.
 */
 char *IOTA_OTAStatusReportPayload(ST_IOTA_UPGRADE_STATUS_INFO otaStatusInfo);
+
+/**
+* @brief Report the Module OTA upgrade status information.
+*
+* @param[in] moduleOtaStatusInfo Pointer to the OTA upgrade status information structure.
+* @return Pointer to the payload string.
+*/
+char *IOTA_ModuleOtaStatusReportPayload(ST_IOTA_MODULE_UPGRADE_STATUS_INFO moduleOtaStatusInfo);
+
+/**
+ * @brief Generate module OTA package request payload.
+ * 
+ * @param info Request parameters structure
+ * @return JSON payload string (caller must free) or NULL on error
+ */
+char *IOTA_GetModuleOtaPackagePayload(ST_IOTA_MODULE_GET_PACKAGE_INFO info);
 
 /**
  * @brief Get the file URL payload

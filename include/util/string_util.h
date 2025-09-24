@@ -62,8 +62,10 @@ char *ReassignMemory(char *oldMemory, unsigned int resultLen);
 
 #define MemFree(ptr)    \
 do {                    \
-        free(*(ptr));   \
-        *(ptr) = NULL;  \
+        if ((ptr) != NULL && *(ptr) != NULL) { \
+                free(*(ptr));   \
+                *(ptr) = NULL;  \
+        }  \
 } while (0)
 
 #endif /* STRING_UTIL_H */

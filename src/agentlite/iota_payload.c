@@ -387,14 +387,18 @@ char *IOTA_OTAVersionReportPayload(ST_IOTA_OTA_VERSION_INFO otaVersionInfo)
 
     cJSON_AddStringToObject(root, OBJECT_DEVICE_ID, otaVersionInfo.object_device_id);
     cJSON_AddStringToObject(tmp, SERVICE_ID, OTA);
-    cJSON_AddStringToObject(tmp, EVENT_TIME, otaVersionInfo.event_time);
     cJSON_AddStringToObject(tmp, EVENT_TYPE, VERSION_REPORT);
-    if (otaVersionInfo.sw_version != NULL) {
-        cJSON_AddStringToObject(paras, SW_VERSION, otaVersionInfo.sw_version);
+    cJSON_AddStringToObject(tmp, EVENT_TIME, otaVersionInfo.event_time);
+    
+    char *event_time = NULL;
+    if (otaVersionInfo.event_time == NULL) {
+        event_time = GetEventTimesStamp();
+        cJSON_AddStringToObject(tmp, EVENT_TIME, event_time);
     }
-    if (otaVersionInfo.fw_version != NULL) { 
-        cJSON_AddStringToObject(paras, FW_VERSION, otaVersionInfo.fw_version);
-    }
+
+    cJSON_AddStringToObject(paras, SW_VERSION, otaVersionInfo.sw_version);
+    cJSON_AddStringToObject(paras, FW_VERSION, otaVersionInfo.fw_version);
+        
     cJSON_AddItemToObject(tmp, PARAS, paras);
 
     cJSON_AddItemToArray(services, tmp);
@@ -403,6 +407,50 @@ char *IOTA_OTAVersionReportPayload(ST_IOTA_OTA_VERSION_INFO otaVersionInfo)
 
     char *payload = cJSON_Print(root);
     cJSON_Delete(root);
+    MemFree(&event_time);
+    return payload;
+}
+
+char *IOTA_ModuleOtaStatusReportPayload(ST_IOTA_MODULE_UPGRADE_STATUS_INFO moduleOtaStatusInfo)
+{
+    if ((moduleOtaStatusInfo.progress > 100) || (moduleOtaStatusInfo.progress < 0)) {
+        PrintfLog(EN_LOG_LEVEL_ERROR, "IOTA_ModuleOtaStatusReportPayload:the progress is invalid.\n");
+        return NULL;
+    }
+
+    if ((moduleOtaStatusInfo.result_code > 0 || moduleOtaStatusInfo.result_code < -256)) {
+        PrintfLog(EN_LOG_LEVEL_ERROR, "IOTA_ModuleOtaStatusReportPayload:the result_code is invalid.\n");
+        return NULL;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *tmp = cJSON_CreateObject();
+    cJSON *paras = cJSON_CreateObject();
+    cJSON *services = cJSON_CreateArray();
+
+    cJSON_AddStringToObject(root, OBJECT_DEVICE_ID, moduleOtaStatusInfo.object_device_id);
+    cJSON_AddStringToObject(tmp, SERVICE_ID, OTA);
+    cJSON_AddStringToObject(tmp, EVENT_TYPE, "module_progress_report");
+    cJSON_AddStringToObject(tmp, EVENT_TIME, moduleOtaStatusInfo.event_time);
+    cJSON_AddStringToObject(tmp, EVENT_ID, moduleOtaStatusInfo.event_id);
+    cJSON_AddNumberToObject(paras, RESULT_CODE, moduleOtaStatusInfo.result_code);
+    cJSON_AddNumberToObject(paras, PROGRESS, moduleOtaStatusInfo.progress);
+    cJSON_AddStringToObject(paras, OTA_MODULE, moduleOtaStatusInfo.module);
+    cJSON_AddStringToObject(paras, DESCRIPTION, moduleOtaStatusInfo.description);
+
+    char *event_time = NULL;
+    if (moduleOtaStatusInfo.event_time == NULL) {
+        event_time = GetEventTimesStamp();
+        cJSON_AddStringToObject(tmp, EVENT_TIME, event_time);
+    }
+
+    cJSON_AddItemToObject(tmp, PARAS, paras);
+    cJSON_AddItemToArray(services, tmp);
+    cJSON_AddItemToObject(root, SERVICES, services);
+
+    char *payload = cJSON_Print(root);
+    cJSON_Delete(root);
+    MemFree(&event_time);
     return payload;
 }
 
@@ -441,6 +489,63 @@ char *IOTA_OTAStatusReportPayload(ST_IOTA_UPGRADE_STATUS_INFO otaStatusInfo)
     char *payload = cJSON_Print(root);
     cJSON_Delete(root);
     return payload;
+}
+
+static char *JsonModuleVersionAndPackagePayload(HW_CHAR *event_time,
+        HW_CHAR *module, HW_CHAR *event_id, HW_CHAR *object_device_id, HW_CHAR *version)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON *tmp = cJSON_CreateObject();
+    cJSON *paras = cJSON_CreateObject();
+    cJSON *services = cJSON_CreateArray();
+
+    cJSON_AddStringToObject(root, OBJECT_DEVICE_ID, object_device_id);
+    cJSON_AddStringToObject(tmp, SERVICE_ID, OTA);
+    cJSON_AddStringToObject(tmp, EVENT_ID, event_id);
+    cJSON_AddStringToObject(tmp, EVENT_TIME, event_time);
+    if (event_time == NULL) {
+        event_time = GetEventTimesStamp();
+        cJSON_AddStringToObject(tmp, EVENT_TIME, event_time);
+    }
+
+    cJSON_AddStringToObject(paras, OTA_MODULE, module);
+    if (version != NULL) {
+        cJSON_AddStringToObject(paras, VERSION, version);
+        cJSON_AddStringToObject(tmp, EVENT_TYPE, "module_version_report");
+    } else { 
+        cJSON_AddStringToObject(tmp, EVENT_TYPE, "module_package_get");
+    }
+    
+
+    cJSON_AddItemToObject(tmp, PARAS, paras);
+    cJSON_AddItemToArray(services, tmp);
+    cJSON_AddItemToObject(root, SERVICES, services);
+
+    char *payload = cJSON_Print(root);
+    cJSON_Delete(root);
+    MemFree(&event_time);
+    return payload;
+}
+
+char *IOTA_ModuleOtaVersionReportPayload(ST_IOTA_MODULE_OTA_VERSION_INFO info)
+{
+    if (((info.version == NULL))) {
+        PrintfLog(EN_LOG_LEVEL_ERROR, "IOTA_OTAVersionReportPayload:the version input is invalid.\n");
+        return NULL;
+    }
+    return JsonModuleVersionAndPackagePayload(info.event_time, info.module,
+            info.event_id, info.object_device_id, info.version);
+   
+}
+
+char *IOTA_GetModuleOtaPackagePayload(ST_IOTA_MODULE_GET_PACKAGE_INFO info)
+{
+    if (((info.module == NULL))) {
+        PrintfLog(EN_LOG_LEVEL_ERROR, "IOTA_GetModuleOtaPackagePayload:the module input is NULL.\n");
+        return NULL;
+    }
+    return JsonModuleVersionAndPackagePayload(info.event_time, info.module,
+            info.event_id, info.object_device_id, NULL);
 }
 
 char *IOTA_GetFileUrlPayload(const ST_IOTA_DOWNLOAD_FILE *file, int isup)

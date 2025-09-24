@@ -53,6 +53,7 @@
   - [6.24 gn compile](#6.24)
   - [6.25 Use global variables to configure connection parameters](#6.25)
   - [6.26 Equipment issuance](#6.26)
+  - [6.28 Module Upgrade (OTA)](#6.28)
 - [7.Frequently Asked Questions](#7)
 - [8.Open Source Agreement](#8)
 
@@ -60,6 +61,7 @@
 
 | Version number | Change type | Function description |
 | ------ | -------- | ------------------------------------------------------------ |
+| 1.2.1 | Function enhancement | Add Module Upgrade (OTA). |
 | 1.2.1 | Function enhancement | Add intelligent site anomaly detection. |
 | 1.2.0 | Function enhancement | Added SDK test code and demo to optimize code usage. |
 | 1.1.5 | Function enhancement | New usage examples |
@@ -73,7 +75,7 @@
 | 0.8.0 | Function enhancement | Replace the new access domain name (iot-mqtts.cn-north-4.myhuaweicloud.com) and root certificate. &lt;br/&gt;If the device uses the old domain name (iot-acc.cn-north-4.myhuaweicloud.com) to access, please use the v0.5.0 version of the SDK |
 | 0.5.0 | Function enhancement | The sdk is preset with the device access address and the CA certificate supporting the Huawei IoT platform, and supports docking with the Huawei Cloud IoT platform. |
 
-*2023/07/22*
+*2025/09/15*
 
 <h1 id = "1">1 Introduction</h1>
 
@@ -105,6 +107,7 @@ The SDK is oriented to embedded terminal devices with strong computing and stora
 | [Pan-Protocol Access](#6.11)                | When third-party protocols other than HTTP, MQTT, LWM2M, etc. are accessed, protocol conversion needs to be completed outside the platform. It is recommended to use a gateway to complete protocol conversion and convert third-party protocols into MQTT protocols. |
 | [Softbus](#6.19)                            | When using Hongmeng system. Through the device group delivered by the platform, the devices can realize the interconnection of things through the soft bus. IoTDA can manage security groups and issue credit identification for communication between group members. |
 | [Equipment Provisioning](#6.26)             | Divided into certificate authentication and key authentication. It is mainly used to distribute to different offices and instances and dynamically complete the initial configuration of different batches of equipment. The released data can be accessed through the device for data transmission. |
+| [Module Upgrade](#6.28)             | Used to cooperate with the platform to download module OTA upgrade packages. |
 
 <h2 id = "2.2">SDK directory structure</h2>
 
@@ -2551,6 +2554,212 @@ If you use device group provisioning, run in the root directory:
   ```
 
  Currently, the platform uses [DigiCert Global Root CA.](https://cacerts.digicert.com/DigiCertGlobalRootCA.crt.pem) and [GlobalSign Root CA - R3](https://valid.r3.roots.globalsign.com/) Certificates issued by two authoritative CAs. The certificate in the conf directory is bound to the basic version domain name of IoTDA by default. If you need to switch to another IoTDA version, please refer to the [Certificate Resources](https://support.huaweicloud.com/intl/en-us/devg-iothub/iot_02_1004.html#section3) section of the official documentation.
+
+<h2 id = "6.28">6.28 Module Upgrade (OTA)</h2>
+If you need to customize the OTA upgrade code, please refer to the OTA code example: ./demos/device_demo/module_ota_test.c.
+
+Demo usage & compilation:
+
+```c
+Modify the connection parameters in module_ota_test.c:
+// You can get the access address from IoT Console "Overview" -> "Access Information"
+char *g_address = "Domain Name";
+char *g_port = "8883";
+char *g_deviceId = "Device ID"; // Please enter the device ID
+char *g_secret = "Device Secret"; // Please enter the device password for secret authentication
+
+Modify module name and module version:
+char *module = "mcu"; // Module name
+char *version = "v1.2.3"; // Module version
+
+To run the relevant demo, run the following commands in the root directory:
+    make module_ota_test
+    ./module_ota_test
+```
+
+- Device reports software/firmware version information:
+
+  `HW_API_FUNC HW_INT IOTA_ModuleOtaVersionReport(ST_IOTA_MODULE_OTA_VERSION_INFO moduleOtaVersionInfo, void *module_ota_test)`
+
+  This function is used for the device to report software/firmware version information. `moduleOtaVersionInfo` is a structure that includes parameters such as module name and module version. For specific usage, refer to: `./demos/device_demo/module_ota_test.c`.
+
+  ```c
+  void Test_ReportModuleOTAVersion(char *module, char *version, char *event_id)
+  {
+      ST_IOTA_MODULE_OTA_VERSION_INFO otaVersion;
+      otaVersion.event_time = NULL;
+      otaVersion.event_id = event_id;
+      otaVersion.module = module;
+      otaVersion.version = version;
+      otaVersion.object_device_id = NULL;
+
+      int messageId = IOTA_ModuleOtaVersionReport(otaVersion, NULL);
+      if (messageId < 0) {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Test_ReportOTAVersion() failed, messageId %d\n", messageId);
+      }
+  }
+  ```
+
+- Platform sends a request to get version information:
+  `HW_API_FUNC HW_VOID IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)`
+
+  This interface is used to configure the callback function for the platform's version information query notification. When the platform issues a version information query notification, the set function pointer will be executed. For specific implementation, refer to: `./demos/device_demo/module_ota_test.c`.
+
+  ```c
+  static void HandleEvenModuleOtaVersion(char *objectDeviceId,  *paras)
+  {
+      if (paras->code == 200) {
+          PrintfLog(EN_LOG_LEVEL_DEBUG, "module_ota_test: Module OTA version reported successfully");
+      } else {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Module OTA version reported failed, error:%s\n", paras->error_detail);
+      }
+  }
+  void main(int argc, char **argv) {
+    ...
+      // upgrade callback
+      TagModuleOtaOps tag = {
+          .onVersionUpReport = HandleEvenModuleOtaVersion
+      };
+      IOTA_SetEvenModuleOtaCallback(tag);
+      ...
+  }
+  ```
+
+- IoT platform sends an upgrade notification to the device side:
+
+  `HW_API_FUNC HW_VOID IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)`
+
+  This interface is used to configure the callback function for receiving upgrade notifications from the IoT platform to the device side. When the IoT platform sends an upgrade notification to the device, the set function pointer will be executed. For specific implementation, refer to:[./demos/device_demo/module_ota_test.c](./demos/device_demo/module_ota_test.c)。
+
+  ```c
+  static void HandleEvenModuleOtaUrlResponse(char *objectDeviceId, EN_IOTA_MODULE_UPGRADE_PARAS *ota_paras)
+  {
+      /* The following is an example of OTA, please modify according to your needs */
+
+      // start to receive firmware_upgrade or software_upgrade packages
+      // Store file packages in ./${filename}中
+      char filename[PKGNAME_MAX + 1];
+      if (IOTA_GetOTAPackages_Ext(ota_paras->url, NULL, 1000, ".", filename) == 0) {
+          TimeSleep(3000);
+      }
+
+      // Failed to retrieve package
+      printf("Module OTA package downloaded successfully, filename:%s", filename);
+  }
+  void main(int argc, char **argv) {
+      ...
+      // upgrade callback
+      TagModuleOtaOps tag = {
+          .onVersionUpReport = HandleEvenModuleOtaVersion
+      };
+      IOTA_SetEvenModuleOtaCallback(tag);
+      ...
+  }
+  ```
+
+-  Device reports upgrade status:
+
+  `HW_API_FUNC HW_INT IOTA_ModuleOtaStatusReport(ST_IOTA_MODULE_UPGRADE_STATUS_INFO otaStatusInfo, void *context)`
+
+  This function is used to report whether the device upgrade was successful. otaStatusInfo is a structure that includes parameters such as result description and result return value.
+
+  ```c
+  // Input parameters: success - whether successful, 0 for success, others for failure; version - software/firmware version; object_device_id is the device ID, defaults to the current connection when NULL.
+  static void Test_ReportUpgradeStatus(int success, char *module, char *event_id)
+  {
+      ST_IOTA_MODULE_UPGRADE_STATUS_INFO statusInfo;
+      statusInfo.result_code = success;
+      statusInfo.progress = 100;
+      statusInfo.module = module;
+      statusInfo.description = (success == 0) ? "success" : "failed";
+
+      statusInfo.event_time = NULL;
+      statusInfo.event_id = event_id;
+      statusInfo.object_device_id = NULL;
+
+      int messageId = IOTA_ModuleOtaStatusReport(statusInfo, NULL);
+      if (messageId < 0) {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Test_ReportUpgradeStatus() failed, messageId %d\n", messageId);
+      }
+  }
+  ```
+
+-  Platform responds to the device's reported upgrade status:
+
+  `HW_API_FUNC HW_INT IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)`
+
+  This interface is used to configure the callback function for the platform's response to the device's reported upgrade status. When the device side receives the notification, the set function pointer will be executed. For specific implementation, please refer to:[./demos/device_demo/module_ota_test.c](./demos/device_demo/module_ota_test.c)。
+
+  ```c
+  static void HandleEvenModuleOtaGetPackage(char *objectDeviceId, EN_IOTA_MODULE_GET_PACKAGE_PARAS *paras)
+  {
+      if (paras->report_result->code == 200) {
+          PrintfLog(EN_LOG_LEVEL_DEBUG, "module_ota_test: Module OTA get package reported successfully");
+          HandleEvenModuleOtaUrlResponse(objectDeviceId, paras->upgrade_paras);
+      } else {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Module OTA get package reported failed, error:%s\n", paras->report_result->error_detail);
+      }
+  }
+  void main(int argc, char **argv) {
+      ...
+      // upgrade callback
+      TagModuleOtaOps tag = {
+        .onProgressReport = HandleEvenModuleOtaProgressReport
+      };
+      IOTA_SetEvenModuleOtaCallback(tag);
+      ...
+  }
+  ```
+
+-  Active module upgrade package pull interface:
+
+  `HW_API_FUNC HW_INT IOTA_ModuleOtaPackageGet(ST_IOTA_MODULE_GET_PACKAGE_INFO moduleOtaGetPackageInfo, void *context)`
+
+  This function is used for the device side to actively pull the upgrade package from the platform. moduleOtaGetPackageInfo is a structure that includes parameters such as module name.
+
+  ```c
+  // Input parameters: success - whether successful, 0 for success, others for failure; version - software/firmware version; object_device_id is the device ID, defaults to the current connection when NULL.
+  static void Test_GetPackage(char *module, char *event_id)
+  {
+      ST_IOTA_MODULE_GET_PACKAGE_INFO info;
+      info.event_id = event_id;
+      info.event_time = NULL;
+      info.module = module;
+      info.object_device_id = NULL;
+
+      int messageId = IOTA_ModuleOtaPackageGet(info, NULL);
+      if (messageId < 0) {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Test_GetPackage() failed, messageId %d\n", messageId);
+      }
+  }
+  ```
+
+-  Platform sends the actively pulled information:
+
+  `HW_API_FUNC HW_INT IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)`
+
+  This interface is used to configure the callback function for the platform's response to the device actively pulling the module upgrade. When the device side receives the notification, the set function pointer will be executed. For specific implementation, please refer to:[./demos/device_demo/module_ota_test.c](./demos/device_demo/module_ota_test.c)。
+
+  ```c
+  static void HandleEvenModuleOtaGetPackage(char *objectDeviceId, EN_IOTA_MODULE_GET_PACKAGE_PARAS *paras)
+  {
+      if (paras->report_result->code == 200) {
+          PrintfLog(EN_LOG_LEVEL_DEBUG, "module_ota_test: Module OTA get package reported successfully");
+          HandleEvenModuleOtaUrlResponse(objectDeviceId, paras->upgrade_paras);
+      } else {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Module OTA get package reported failed, error:%s\n", paras->report_result->error_detail);
+      }
+  }
+  void main(int argc, char **argv) {
+      ...
+      // upgrade callback
+      TagModuleOtaOps tag = {
+        .onGetPackage = HandleEvenModuleOtaGetPackage
+      };
+      IOTA_SetEvenModuleOtaCallback(tag);
+      ...
+  }
+  ```
 
 <h1 id = "7">7.Frequently Asked Questions</h1>
 

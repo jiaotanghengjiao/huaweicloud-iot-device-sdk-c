@@ -321,9 +321,48 @@ HW_API_FUNC HW_INT IOTA_OTAVersionReport(ST_IOTA_OTA_VERSION_INFO otaVersionInfo
     }
 }
 
+HW_API_FUNC HW_INT IOTA_ModuleOtaVersionReport(ST_IOTA_MODULE_OTA_VERSION_INFO moduleOtaVersionInfo, void *context)
+{
+    char *payload = IOTA_ModuleOtaVersionReportPayload(moduleOtaVersionInfo);
+    int messageId = 0;
+    if (payload == NULL) {
+        return IOTA_FAILURE;
+    } else {
+        messageId = EventUp(payload, context);
+        MemFree(&payload);
+        return messageId;
+    }
+}
+
+HW_API_FUNC HW_INT IOTA_ModuleOtaPackageGet(ST_IOTA_MODULE_GET_PACKAGE_INFO moduleOtaGetPackageInfo, void *context)
+{
+    char *payload = IOTA_GetModuleOtaPackagePayload(moduleOtaGetPackageInfo);
+    int messageId = 0;
+    if (payload == NULL) {
+        return IOTA_FAILURE;
+    } else {
+        messageId = EventUp(payload, context);
+        MemFree(&payload);
+        return messageId;
+    }
+}
+
 HW_API_FUNC HW_INT IOTA_OTAStatusReport(ST_IOTA_UPGRADE_STATUS_INFO otaStatusInfo, void *context)
 {
     char *payload = IOTA_OTAStatusReportPayload(otaStatusInfo);
+    int messageId = 0;
+    if (payload == NULL) {
+        return IOTA_FAILURE;
+    } else {
+        messageId = EventUp(payload, context);
+        MemFree(&payload);
+        return messageId;
+    }
+}
+
+HW_API_FUNC HW_INT IOTA_ModuleOtaStatusReport(ST_IOTA_MODULE_UPGRADE_STATUS_INFO otaStatusInfo, void *context)
+{
+    char *payload = IOTA_ModuleOtaStatusReportPayload(otaStatusInfo);
     int messageId = 0;
     if (payload == NULL) {
         return IOTA_FAILURE;
@@ -724,7 +763,7 @@ HW_API_FUNC HW_INT IOTA_OTAVerifySign(HW_CHAR *sign, const HW_CHAR *otaFilePath,
 
     int i, j;
     char mac32[2] = {0};
-    int sum = 2;
+    int sum = 4;
     for(i = 0; i < SHA256_DIGEST_LENGTH; i++) {
         snprintf_s(mac32, sum, sum, "%02x", hash[i]);
         for (j = 0; j < 2; j++) { 
@@ -1223,6 +1262,9 @@ static int getFileNameToUrl(char *url, char *fileName, int fileNameLen) {
 
     begin = strrchr(data, '/'); // 获取最后一次出现的地址
     if (begin == NULL) {
+        return IOTA_FAILURE;
+    }
+    if (strlen(begin) - 1 < 0) {
         return IOTA_FAILURE;
     }
     ret = memcpy_s(fileName, fileNameLen, begin + 1, strlen(begin) - 1);

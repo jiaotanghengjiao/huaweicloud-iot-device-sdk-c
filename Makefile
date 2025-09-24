@@ -131,6 +131,9 @@ time_sync_test: $(OBJ_DIRS) $(OUT_PATH)/time_sync_test.o $(OBJS)
 ota_test: $(OBJ_DIRS) $(OUT_PATH)/ota_test.o $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OUT_PATH)/ota_test.o $(OBJS)  $(LIBS)
 
+module_ota_test: $(OBJ_DIRS) $(OUT_PATH)/module_ota_test.o $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OUT_PATH)/module_ota_test.o $(OBJS)  $(LIBS)
+
 report_device_info_test: $(OBJ_DIRS) $(OUT_PATH)/report_device_info_test.o $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OUT_PATH)/report_device_info_test.o $(OBJS)  $(LIBS)
 	
@@ -296,6 +299,9 @@ $(OUT_PATH)/time_sync_test.o: $(SRC_PATH)/../demos/device_demo/time_sync_test.c
 $(OUT_PATH)/ota_test.o: $(SRC_PATH)/../demos/device_demo/ota_test.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(HEADER_PATH)/agentlite/ $(HEADER_PATH)/service/ $(HEADER_PATH)/util/ $(HEADER_PATH)/third_party/cjson/ $(HEADER_PATH)
 
+$(OUT_PATH)/module_ota_test.o: $(SRC_PATH)/../demos/device_demo/module_ota_test.c
+	$(CC) $(CFLAGS) -c $< -o $@ $(HEADER_PATH)/agentlite/ $(HEADER_PATH)/service/ $(HEADER_PATH)/util/ $(HEADER_PATH)/third_party/cjson/ $(HEADER_PATH)
+
 $(OUT_PATH)/report_device_info_test.o: $(SRC_PATH)/../demos/device_demo/report_device_info_test.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(HEADER_PATH)/agentlite/ $(HEADER_PATH)/service/ $(HEADER_PATH)/util/ $(HEADER_PATH)/third_party/cjson/ $(HEADER_PATH)
 
@@ -360,7 +366,7 @@ $(DEVICE_RULE_OBJS):$(OUT_PATH)/%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(DEVICE_RULE_INC)
 
 BOOTSTREP_TEST = bootstrap_test bootstrap_groups_test
-DEVICE_TEST = basic_test mqttV5_test message_test properties_test command_test shadow_test time_sync_test ota_test report_device_info_test report_anomaly_test log_report_test file_up_down_test device_rule_test sys_hal_test device_config_test remote_login_test reconnection_test
+DEVICE_TEST = basic_test mqttV5_test message_test properties_test command_test shadow_test time_sync_test ota_test module_ota_test report_device_info_test report_anomaly_test log_report_test file_up_down_test device_rule_test sys_hal_test device_config_test remote_login_test reconnection_test
 GATEWAY_TEST = gateway_client_test gateway_server_test
 BRIDGE_TEST = bridge_client_test bridge_server_test
 SOFT_BUS_TEST = 

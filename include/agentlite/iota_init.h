@@ -82,6 +82,31 @@ typedef struct {
 } EN_IOTA_OTA_PARAS;
 
 typedef struct {
+    HW_CHAR *module;
+    HW_CHAR *version;
+    HW_CHAR *url;
+    HW_INT file_size;
+    HW_CHAR *file_name;
+    HW_INT expires;
+    HW_CHAR *sign_method;
+    HW_CHAR *sign;
+    HW_CHAR *custom_info;
+    HW_CHAR *task_id; // 批量任务id
+    HW_INT sub_device_count; // 子设备数量
+    HW_CHAR *task_ext_info; // 创建批量任务时添加的扩展信息
+} EN_IOTA_MODULE_UPGRADE_PARAS;
+
+typedef struct {
+    HW_INT code; // 是否上报成功
+    HW_CHAR *error_detail; // 错误信息
+} EN_IOTA_MODULE_REPORT_PARAS;
+
+typedef struct {
+    EN_IOTA_MODULE_REPORT_PARAS *report_result;
+    EN_IOTA_MODULE_UPGRADE_PARAS *upgrade_paras;
+} EN_IOTA_MODULE_GET_PACKAGE_PARAS;
+
+typedef struct {
     HW_CHAR *payload;
 } EN_IOTA_DEVICE_RULE_PARAS;
 
@@ -164,6 +189,9 @@ typedef struct {
     EN_IOTA_TUNNEL_MGR_PARAS *tunnel_mgr_paras;
     EN_IOTA_FILE_MGR_PARAS *file_mgr_paras;
     EN_IOTA_SOFT_BUS_PARAS *soft_bus_paras;
+    EN_IOTA_MODULE_REPORT_PARAS *module_report_paras;
+    EN_IOTA_MODULE_UPGRADE_PARAS *module_upgrade_paras;
+    EN_IOTA_MODULE_GET_PACKAGE_PARAS *module_get_package_paras;
 } EN_IOTA_SERVICE_EVENT;
 
 typedef struct {
@@ -410,6 +438,15 @@ HW_API_FUNC HW_VOID IOTA_SetDeviceConfigCallback(PFN_DEVICE_CONFIG_CALLBACK_HAND
  */
 HW_API_FUNC HW_VOID IOTA_EnableDeviceRuleStorage(const char *filepath);
 
+// module ota回调细化
+typedef struct {
+    void (*onVersionUpReport)(char *objectDeviceId, EN_IOTA_MODULE_REPORT_PARAS *paras); // module ota版本上报回调
+    void (*onUrlResponse)(char *objectDeviceId, EN_IOTA_MODULE_UPGRADE_PARAS *paras); // module ota获取平台url回调
+    void (*onProgressReport)(char *objectDeviceId, EN_IOTA_MODULE_REPORT_PARAS *paras); // module ota上报升级状态回调
+    void (*onGetPackage)(char *objectDeviceId, EN_IOTA_MODULE_GET_PACKAGE_PARAS *paras); // module ota主动拉取升级回调
+} TagModuleOtaOps;
+
+HW_API_FUNC HW_VOID IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler);
 
 typedef enum {
     EN_IOTA_EVENT_SUB_DEVICE_MANAGER = 0,
@@ -442,6 +479,10 @@ typedef enum {
     EN_IOTA_EVENT_FIRMWARE_UPGRADE_V2 = 13,
     EN_IOTA_EVENT_SOFTWARE_UPGRADE_V2 = 14,
     EN_IOTA_EVENT_UPDATE_SUB_DEVICE_RESPONSE = 15,
+    EN_IOTA_EVENT_MODULE_VERSION_UP = 16,
+    EN_IOTA_EVENT_MODULE_URL_RESPONSE = 17,
+    EN_IOTA_EVENT_MODULE_PROGRESS_RESPONSE = 18,
+    EN_IOTA_EVENT_MODULE_PACKAGE_RESPONSE = 19,
     EN_IOTA_EVENT_TYPE_ERROR = -1
 } EN_IOTA_EVENT_TYPE;
 

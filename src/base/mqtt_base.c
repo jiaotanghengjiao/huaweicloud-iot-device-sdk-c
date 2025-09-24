@@ -598,7 +598,7 @@ void MqttBase_OnConnectionLost(void *context, char *cause)
 
 int MqttBase_OnMessageArrived(void *context, char *topicName, int topicLen, MQTTAsync_message *message)
 {
-    PrintfLog(EN_LOG_LEVEL_INFO, "MqttBase: MqttBase_OnMessageArrived() -------------> \n");
+    PrintfLog(EN_LOG_LEVEL_DEBUG, "MqttBase: MqttBase_OnMessageArrived() -------------> \n");
     char *temp_topic = NULL;
     char *temp_payload = NULL;
 #if defined(MQTTV5)
@@ -624,7 +624,7 @@ int MqttBase_OnMessageArrived(void *context, char *topicName, int topicLen, MQTT
         MemFree(&temp_topic);
         return -1;
     }
-    PrintfLog(EN_LOG_LEVEL_INFO, "MqttBase: MqttBase_OnMessageArrived() topic: %s, payload %s\n", temp_topic,
+    PrintfLog(EN_LOG_LEVEL_DEBUG, "MqttBase: MqttBase_OnMessageArrived() topic: %s, payload %s\n", temp_topic,
         temp_payload);
 
     if (onMessageA) {

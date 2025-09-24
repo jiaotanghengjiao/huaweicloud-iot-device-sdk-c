@@ -293,4 +293,9 @@ HW_API_FUNC HW_VOID IOTA_SetEvenFileManagerCallback(EVENT_CALLBACK_HANDLER_SPECI
     SetEvenFileManagerCallback(callbackHandler);
 }
 
+HW_API_FUNC HW_VOID IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)
+{
+    SetEvenModuleOtaCallback(callbackHandler);
+}
+
 

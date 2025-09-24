@@ -55,6 +55,7 @@
   -  [6.25 使用全局变量配置连接参数](#6.25)
   -  [6.26 设备发放](#6.26)
   -  [6.27 智能站点异常检测](#6.27)
+  -  [6.28 模块升级（OTA）](#6.28)
 - [7.常见问题](#7)
 - [8.开源协议](#8)
 
@@ -62,6 +63,7 @@
 
 | 版本号 | 变更类型 | 功能描述说明                                                 |
 | ------ | -------- | ------------------------------------------------------------ |
+| 1.2.2  | 功能增强 | 新增模块升级（OTA）                                         |
 | 1.2.1  | 功能增强 | 新增智能站点异常检测                                         |
 | 1.2.0  | 功能增强 | 新增SDK测试代码及Demo，优化代码使用。                        |
 | 1.1.5  | 功能增强 | 新增使用示例                                                 |
@@ -75,7 +77,7 @@
 | 0.8.0  | 功能增强 | 更换新的接入域名（iot-mqtts.cn-north-4.myhuaweicloud.com）和根证书。<br/>如果设备使用老域名（iot-acc.cn-north-4.myhuaweicloud.com）接入，请使用 v0.5.0版本的SDK |
 | 0.5.0  | 功能增强 | sdk预置了设备接入地址及华为物联网平台配套的CA证书，支持对接华为云物联网平台。 |
 
-*2025/08/01*
+*2025/09/15*
 
 <h1 id="1"> 1.前言</h1>
 本文通过实例讲述huaweicloud-iot-device-sdk-c（以下简称SDK）帮助设备用MQTT协议快速连接到华为物联网平台。
@@ -105,6 +107,7 @@ SDK面向运算、存储能力较强的嵌入式终端设备，开发者通过�
 | [泛协议接入](#6.11)             | 当非HTTP、MQTT、LWM2M等第三方协议接入时，需要在平台外部完成协议转换。推荐使用网关来完成协议转换，将第三方协议转成MQTT协议。 |
 | [软总线](#6.19)                  | 当使用鸿蒙系统时。通过平台下发设备组，设备可通过软总线实现物物互联。IoTDA可以进行安全群组管理以及下发群成员之间通信的授信标识。 |
 | [设备发放](#6.26)                  | 分为证书认证、密钥认证。主要用于分发到不同局点、实例，动态完成不同批次设备初始化配置。发放完成的数据可以通过设备接入进行数据传输。 |
+| [模块升级](#6.28)                  | 用于与平台配合下载模块OTA升级包。 |
 
 <h2 id="2.2">2.2 SDK目录结构</h2>
 
@@ -392,8 +395,8 @@ SDK需运行在Linux操作系统上，并安装好gcc（建议4.8及以上版本
 
     5.1 加载库文件
 
-    ```shell
-     LD_LIBRARY_PATH=./lib/
+    ```shellmodule_ota_test: Module OTA version reported failed
+    export LD_LIBRARY_PATH=./lib/
     ```
 
     5.2 执行如下命令：
@@ -2567,6 +2570,214 @@ char *g_secret = "设备密钥"; // 密钥认证时请输入设备密码
   }
   ```
 
+
+<h2 id = "6.28">6.28 模块升级（OTA）</h2>
+
+若是需要自定义OTA升级代码，可见OTA代码示例：[./demos/device_demo/module_ota_test.c](./demos/device_demo/module_ota_test.c)。
+
+Demo使用&编译：
+
+```c
+在 module_ota_test.c中修改连接参数：
+// You can get the access address from IoT Console "Overview" -> "Access Information"
+char *g_address = "域名"; 
+char *g_port = "8883";
+char *g_deviceId = "设备id"; // 请输入设备id
+char *g_secret = "设备密钥"; // 密钥认证时请输入设备密码
+
+修改模块名称、模块版本：
+char *module = "mcu";  // 模块名称
+char *version = "v1.2.3"; // 模块版本
+
+若要运行相关demo，在根目录运行： 
+    make module_ota_test
+    ./module_ota_test
+```
+  
+- 设备上报模块版本信息 ：
+
+  `HW_API_FUNC HW_INT IOTA_ModuleOtaVersionReport(ST_IOTA_MODULE_OTA_VERSION_INFO moduleOtaVersionInfo, void *module_ota_test)`
+
+  该函数用于设备上报模块版本信息。moduleOtaVersionInfo为结构体，包括模块名、模块版本等参数。具体使用方式可见：./demos/device_demo/module_ota_test.c。
+
+  ```c
+  void Test_ReportModuleOTAVersion(char *module, char *version, char *event_id)
+  {
+      ST_IOTA_MODULE_OTA_VERSION_INFO otaVersion;
+      otaVersion.event_time = NULL;
+      otaVersion.event_id = event_id;
+      otaVersion.module = module;
+      otaVersion.version = version;
+      otaVersion.object_device_id = NULL;
+
+      int messageId = IOTA_ModuleOtaVersionReport(otaVersion, NULL);
+      if (messageId < 0) {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Test_ReportOTAVersion() failed, messageId %d\n", messageId);
+      }
+  }
+  ```
+
+- 平台下发获取版本信息响应 ：
+
+  `HW_API_FUNC HW_VOID IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)`
+
+  该接口用于配置平台下发获取版本信息通知的回调函数，当平台下发获取版本信息通知时，会运行设置的函数指针。具体实现方式可见：./demos/device_demo/module_ota_test.c。
+
+  ```c
+  static void HandleEvenModuleOtaVersion(char *objectDeviceId,  *paras)
+  {
+      if (paras->code == 200) {
+          PrintfLog(EN_LOG_LEVEL_DEBUG, "module_ota_test: Module OTA version reported successfully");
+      } else {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Module OTA version reported failed, error:%s\n", paras->error_detail);
+      }
+  }
+  void main(int argc, char **argv) {
+    ...
+      // 升级回调
+      TagModuleOtaOps tag = {
+          .onVersionUpReport = HandleEvenModuleOtaVersion
+      };
+      IOTA_SetEvenModuleOtaCallback(tag);
+      ...
+  }
+  ```
+
+- 物联网平台向设备侧下发升级通知：
+
+  `HW_API_FUNC HW_VOID IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)`
+
+  该接口用于物联网平台向设备侧下发升级通知的回调函数，当物联网平台向设备侧下发升级通知时，会运行设置的函数指针。具体实现方式可见：[./demos/device_demo/module_ota_test.c](./demos/device_demo/module_ota_test.c)。
+
+  ```c
+  static void HandleEvenModuleOtaUrlResponse(char *objectDeviceId, EN_IOTA_MODULE_UPGRADE_PARAS *ota_paras)
+  {
+      /* The following is an example of OTA, please modify according to your needs */
+
+      // start to receive firmware_upgrade or software_upgrade packages
+      // Store file packages in ./${filename}中
+      char filename[PKGNAME_MAX + 1];
+      if (IOTA_GetOTAPackages_Ext(ota_paras->url, NULL, 1000, ".", filename) == 0) {
+          TimeSleep(3000);
+      }
+
+      // Failed to retrieve package
+      printf("Module OTA package downloaded successfully, filename:%s", filename);
+  }
+  void main(int argc, char **argv) {
+      ...
+      // 升级回调
+      TagModuleOtaOps tag = {
+          .onVersionUpReport = HandleEvenModuleOtaVersion
+      };
+      IOTA_SetEvenModuleOtaCallback(tag);
+      ...
+  }
+  ```
+
+-  设备上报升级状态：
+
+  `HW_API_FUNC HW_INT IOTA_ModuleOtaStatusReport(ST_IOTA_MODULE_UPGRADE_STATUS_INFO otaStatusInfo, void *context)`
+
+  该函数用于上报设备升级是否成功。otaStatusInfo为结构体，包括结果描述、结果返回值等参数。
+
+  ```c
+  // 入参： success - 是否成功，成功0，失败其他；version - 模块版本；object_device_id为设备id,为NULL时默认为本连接。
+  static void Test_ReportUpgradeStatus(int success, char *module, char *event_id)
+  {
+      ST_IOTA_MODULE_UPGRADE_STATUS_INFO statusInfo;
+      statusInfo.result_code = success;
+      statusInfo.progress = 100;
+      statusInfo.module = module;
+      statusInfo.description = (success == 0) ? "success" : "failed";
+
+      statusInfo.event_time = NULL;
+      statusInfo.event_id = event_id;
+      statusInfo.object_device_id = NULL;
+
+      int messageId = IOTA_ModuleOtaStatusReport(statusInfo, NULL);
+      if (messageId < 0) {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Test_ReportUpgradeStatus() failed, messageId %d\n", messageId);
+      }
+  }
+  ```
+
+-  平台响应设备上报升级状态：
+
+  `HW_API_FUNC HW_INT IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)`
+
+  该接口用于配置平台响应设备上报升级状态回调函数，当设备侧收到下发通知时，会运行设置的函数指针。具体实现方式可见：[./demos/device_demo/module_ota_test.c](./demos/device_demo/module_ota_test.c)。
+
+  ```c
+  static void HandleEvenModuleOtaGetPackage(char *objectDeviceId, EN_IOTA_MODULE_GET_PACKAGE_PARAS *paras)
+  {
+      if (paras->report_result->code == 200) {
+          PrintfLog(EN_LOG_LEVEL_DEBUG, "module_ota_test: Module OTA get package reported successfully");
+          HandleEvenModuleOtaUrlResponse(objectDeviceId, paras->upgrade_paras);
+      } else {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Module OTA get package reported failed, error:%s\n", paras->report_result->error_detail);
+      }
+  }
+  void main(int argc, char **argv) {
+      ...
+      // 升级回调
+      TagModuleOtaOps tag = {
+        .onProgressReport = HandleEvenModuleOtaProgressReport
+      };
+      IOTA_SetEvenModuleOtaCallback(tag);
+      ...
+  }
+  ```
+
+-  主动拉取模块升级接口：
+
+  `HW_API_FUNC HW_INT IOTA_ModuleOtaPackageGet(ST_IOTA_MODULE_GET_PACKAGE_INFO moduleOtaGetPackageInfo, void *context)`
+
+  该函数用于设备侧主动拉取平台升级包。moduleOtaGetPackageInfo为结构体，包括模块名称等参数。
+
+  ```c
+  // 入参： success - 是否成功，成功0，失败其他；version - 版本；object_device_id为设备id,为NULL时默认为本连接。
+  static void Test_GetPackage(char *module, char *event_id)
+  {
+      ST_IOTA_MODULE_GET_PACKAGE_INFO info;
+      info.event_id = event_id;
+      info.event_time = NULL;
+      info.module = module;
+      info.object_device_id = NULL;
+
+      int messageId = IOTA_ModuleOtaPackageGet(info, NULL);
+      if (messageId < 0) {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Test_GetPackage() failed, messageId %d\n", messageId);
+      }
+  }
+  ```
+
+-  平台下发主动拉取信息：
+
+  `HW_API_FUNC HW_INT IOTA_SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)`
+
+  该接口用于配置平台响应设备主动拉取模块升级的回调函数，当设备侧收到下发通知时，会运行设置的函数指针。具体实现方式可见：[./demos/device_demo/module_ota_test.c](./demos/device_demo/module_ota_test.c)。
+
+  ```c
+  static void HandleEvenModuleOtaGetPackage(char *objectDeviceId, EN_IOTA_MODULE_GET_PACKAGE_PARAS *paras)
+  {
+      if (paras->report_result->code == 200) {
+          PrintfLog(EN_LOG_LEVEL_DEBUG, "module_ota_test: Module OTA get package reported successfully");
+          HandleEvenModuleOtaUrlResponse(objectDeviceId, paras->upgrade_paras);
+      } else {
+          PrintfLog(EN_LOG_LEVEL_ERROR, "module_ota_test: Module OTA get package reported failed, error:%s\n", paras->report_result->error_detail);
+      }
+  }
+  void main(int argc, char **argv) {
+      ...
+      // 升级回调
+      TagModuleOtaOps tag = {
+        .onGetPackage = HandleEvenModuleOtaGetPackage
+      };
+      IOTA_SetEvenModuleOtaCallback(tag);
+      ...
+  }
+  ```
 
 <h1 id = "7">7.常见问题</h1>
 

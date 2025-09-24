@@ -69,6 +69,7 @@ M2M_CALLBACK_HANDLER onM2mMessage;
 DEVICE_CONFIG_CALLBACK_HANDLER onDeviceConfig = NULL;
 TagEventsOps tagEventsOps;
 TagOtaOps tagOtaOps;
+TagModuleOtaOps tagModuleOtaOps;
 BRIDGES_DEVICE_LOGIN onBridgesDeviceLogin;
 BRIDGES_DEVICE_LOGOUT onBridgesDeviceLogout;
 BRIDGES_DEVICE_RESET_SECRET onBridgesDeviceResetSecret;
@@ -707,17 +708,13 @@ static void OnBridgesLoginOrLogoutArrived(void *context, int token, int code, ch
         return;
     }
     
-    log->mqtt_msg_info = (EN_IOTA_MQTT_MSG_INFO *)malloc(sizeof(EN_IOTA_MQTT_MSG_INFO));
+    log->mqtt_msg_info = CreateMqttMsgInfo(context, token, code);
     if (log->mqtt_msg_info == NULL) {
-        PrintfLog(EN_LOG_LEVEL_ERROR, "there is not enough memory here.\n");
+        PrintfLog(EN_LOG_LEVEL_ERROR, "OnBridgesLoginOrLogoutArrived(): there is not enough memory here.\n");
         MemFree(&log);
         return;
     }
-    log->mqtt_msg_info->context = context;
-    log->mqtt_msg_info->messageId = token;
-    log->mqtt_msg_info->code = code;
     log->bridge_device_id = bridgeDeviceId;
-
     log->request_id = request_id;
 
     JSON *root = JSON_Parse(message);
@@ -1160,63 +1157,151 @@ static int OnEventsDownFileManager(EN_IOTA_SERVICE_EVENT *services, char *event_
     return 1;
 }
 
-static int OnEventsDownOtaArrived(EN_IOTA_SERVICE_EVENT *services, char *event_type, JSON *paras)
+// todo 
+// 解析 EN_IOTA_MODULE_REPORT_PARAS
+int ParseModuleReportResult(EN_IOTA_MODULE_REPORT_PARAS *service, JSON *paras)
 {
-    services->ota_paras = (EN_IOTA_OTA_PARAS *)malloc(sizeof(EN_IOTA_OTA_PARAS));
-    if (services->ota_paras == NULL) {
-        PrintfLog(EN_LOG_LEVEL_ERROR, "OnEventsDownOtaArrived(): there is not enough memory here.\n");
+    if (service == NULL || paras  == NULL) {
         return -1;
     }
+    service->code = JSON_GetIntFromObject(paras, MODULE_CODE, -1);
+    service->error_detail = JSON_Print(JSON_GetObjectFromObject(paras, MODULE_ERROR_DETAIL));
+    return 1;
+}
 
+// 解析 EN_IOTA_MODULE_UPGRADE_PARAS
+int ParseModuleUpgradeInfo(EN_IOTA_MODULE_UPGRADE_PARAS *services, JSON *paras)
+{
+    if (services == NULL || paras  == NULL) {
+        return -1;
+    }
+    char *module = JSON_GetStringFromObject(paras, OTA_MODULE, NULL);
+    services->module = module;
+
+    char *version = JSON_GetStringFromObject(paras, VERSION, NULL);
+    services->version = version;
+
+    char *url = JSON_GetStringFromObject(paras, URL, NULL);
+    services->url = url;
+
+    int file_size = JSON_GetIntFromObject(paras, FILE_SIZE, -1);
+    services->file_size = file_size;
+
+    char *file_name = JSON_GetStringFromObject(paras, FILE_NAME, NULL);
+    services->file_name = file_name;
+
+    char *sign_method = JSON_GetStringFromObject(paras, SIGN_METHOD, NULL);
+    services->sign_method = sign_method;
+    
+    int sub_device_count = JSON_GetIntFromObject(paras, SUBDEVICE_COUNT, -1);
+    services->sub_device_count = sub_device_count;
+
+    char *task_ext_info = JSON_GetStringFromObject(paras, TASKEXT_INFO, NULL);
+    services->task_ext_info = task_ext_info;
+
+    char *custom_info = JSON_GetStringFromObject(paras, CUSTOM_INFO, NULL);
+    services->custom_info = custom_info;
+
+    int expires = JSON_GetIntFromObject(paras, EXPIRES, -1);
+    services->expires = expires;
+
+    char *sign = JSON_GetStringFromObject(paras, SIGN, NULL);
+    services->sign = sign;
+    return 1;
+}
+
+int ParseModuleGetPackageInfo(EN_IOTA_MODULE_GET_PACKAGE_PARAS *services, JSON *paras) 
+{
+    if (services == NULL || paras  == NULL) {
+        return -1;
+    }
+    
+    SAFE_MALLOC(services->report_result, EN_IOTA_MODULE_REPORT_PARAS);
+    SAFE_MALLOC(services->upgrade_paras, EN_IOTA_MODULE_UPGRADE_PARAS);
+    ParseModuleReportResult(services->report_result, paras);
+    ParseModuleUpgradeInfo(services->upgrade_paras, paras);
+    return 1;
+}
+
+// 解析 EN_IOTA_OTA_PARAS
+int ParseOtaParasInfo(EN_IOTA_SERVICE_EVENT *services, JSON *paras)
+{
+
+    if (services == NULL || paras  == NULL) {
+        return -1;
+    }
+    char *version = JSON_GetStringFromObject(paras, VERSION, NULL);
+    services->ota_paras->version = version;
+
+    char *url = JSON_GetStringFromObject(paras, URL, NULL);
+    services->ota_paras->url = url;
+
+    int file_size = JSON_GetIntFromObject(paras, FILE_SIZE, -1);
+    services->ota_paras->file_size = file_size;
+
+    char *file_name = JSON_GetStringFromObject(paras, FILE_NAME, NULL);
+    services->ota_paras->file_name = file_name;
+
+    char *task_id = JSON_GetStringFromObject(paras, TASK_ID, NULL);
+    services->ota_paras->task_id = task_id;
+    
+    int sub_device_count = JSON_GetIntFromObject(paras, SUBDEVICE_COUNT, -1);
+    services->ota_paras->sub_device_count = sub_device_count;
+
+    char *task_ext_info = JSON_GetStringFromObject(paras, TASKEXT_INFO, NULL);
+    services->ota_paras->task_ext_info = task_ext_info;
+
+    char *access_token = JSON_GetStringFromObject(paras, ACCESS_TOKEN, NULL);
+    services->ota_paras->access_token = access_token;
+
+    int expires = JSON_GetIntFromObject(paras, EXPIRES, -1);
+    services->ota_paras->expires = expires;
+
+    char *sign = JSON_GetStringFromObject(paras, SIGN, NULL);
+    services->ota_paras->sign = sign;
+    return 1;
+}
+
+
+static int OnEventsDownOtaArrived(EN_IOTA_SERVICE_EVENT *services, char *event_type, JSON *paras)
+{
     if (!strcmp(event_type, VERSION_QUERY)) {
         services->event_type = EN_IOTA_EVENT_VERSION_QUERY;
-        
+        return 1;
     } else if (!strcmp(event_type, FIRMWARE_UPGRADE)) {
         services->event_type = EN_IOTA_EVENT_FIRMWARE_UPGRADE;
     } else if (!strcmp(event_type, SOFTWARE_UPGRADE)) {
         services->event_type = EN_IOTA_EVENT_SOFTWARE_UPGRADE;
+
     } else if (!strcmp(event_type, FIRMWARE_UPGRADE_V2)) {
         services->event_type = EN_IOTA_EVENT_FIRMWARE_UPGRADE_V2;
     } else if (!strcmp(event_type, SOFTWARE_UPGRADE_V2)) {
         services->event_type = EN_IOTA_EVENT_SOFTWARE_UPGRADE_V2;
+
+    } else if (!strcmp(event_type, MODULE_VERSION_RESPONSE)) {
+        services->event_type = EN_IOTA_EVENT_MODULE_VERSION_UP;
+        SAFE_MALLOC(services->module_report_paras, EN_IOTA_MODULE_REPORT_PARAS);
+        return ParseModuleReportResult(services->module_report_paras, paras);
+
+    } else if (!strcmp(event_type, MODULE_UPGRADE)) {
+        services->event_type = EN_IOTA_EVENT_MODULE_URL_RESPONSE;
+        SAFE_MALLOC(services->module_upgrade_paras, EN_IOTA_SERVICE_EVENT);
+        return ParseModuleUpgradeInfo(services->module_upgrade_paras, paras);
+
+    } else if (!strcmp(event_type, MODULE_PROGRESS_RESPONSE)) {
+        services->event_type = EN_IOTA_EVENT_MODULE_PROGRESS_RESPONSE;
+        SAFE_MALLOC(services->module_report_paras, EN_IOTA_MODULE_REPORT_PARAS);
+        return ParseModuleReportResult(services->module_report_paras, paras);
+
+    } else if (!strcmp(event_type, MODULE_PACKAGE_RESPONSE)) {
+        services->event_type = EN_IOTA_EVENT_MODULE_PACKAGE_RESPONSE;
+        SAFE_MALLOC(services->module_get_package_paras, EN_IOTA_MODULE_GET_PACKAGE_PARAS);
+        return ParseModuleGetPackageInfo(services->module_get_package_paras, paras);
     }
 
     // firmware_upgrade or software_upgrade
-    if ((services->event_type == EN_IOTA_EVENT_FIRMWARE_UPGRADE) ||
-        (services->event_type == EN_IOTA_EVENT_SOFTWARE_UPGRADE) ||
-        (services->event_type == EN_IOTA_EVENT_FIRMWARE_UPGRADE_V2) ||
-        (services->event_type == EN_IOTA_EVENT_SOFTWARE_UPGRADE_V2)) {
-        char *version = JSON_GetStringFromObject(paras, VERSION, NULL);
-        services->ota_paras->version = version;
-
-        char *url = JSON_GetStringFromObject(paras, URL, NULL);
-        services->ota_paras->url = url;
-
-        int file_size = JSON_GetIntFromObject(paras, FILE_SIZE, -1);
-        services->ota_paras->file_size = file_size;
-
-        char *file_name = JSON_GetStringFromObject(paras, FILE_NAME, NULL);
-        services->ota_paras->file_name = file_name;
-
-        char *task_id = JSON_GetStringFromObject(paras, TASK_ID, NULL);
-        services->ota_paras->task_id = task_id;
-        
-        int sub_device_count = JSON_GetIntFromObject(paras, SUBDEVICE_COUNT, -1);
-        services->ota_paras->sub_device_count = sub_device_count;
-
-        char *task_ext_info = JSON_GetStringFromObject(paras, TASKEXT_INFO, NULL);
-        services->ota_paras->task_ext_info = task_ext_info;
-
-        char *access_token = JSON_GetStringFromObject(paras, ACCESS_TOKEN, NULL);
-        services->ota_paras->access_token = access_token;
-
-        int expires = JSON_GetIntFromObject(paras, EXPIRES, -1);
-        services->ota_paras->expires = expires;
-
-        char *sign = JSON_GetStringFromObject(paras, SIGN, NULL);
-        services->ota_paras->sign = sign;
-    }
-    return 1;
+    SAFE_MALLOC(services->ota_paras, EN_IOTA_OTA_PARAS);
+    return ParseOtaParasInfo(services->ota_paras, paras);
 }
 
 static int OnEventsDownNtpArrived(EN_IOTA_SERVICE_EVENT *services, char *event_type, const char *message)
@@ -1341,6 +1426,13 @@ static void OnEventsDownMemFree(EN_IOTA_EVENT *event, int services_count)
             }
         } else if (event->services[m].servie_id == EN_IOTA_EVENT_OTA) {
             MemFree(&event->services[m].ota_paras);
+            MemFree(&event->services[m].module_report_paras);
+            MemFree(&event->services[m].module_upgrade_paras);
+            if(event->services[m].module_get_package_paras != NULL) {
+                MemFree(&event->services[m].module_get_package_paras->report_result);
+                MemFree(&event->services[m].module_get_package_paras->upgrade_paras);
+            }
+            MemFree(&event->services[m].module_get_package_paras);
         } else if (event->services[m].servie_id == EN_IOTA_EVENT_TIME_SYNC) {
             MemFree(&event->services[m].ntp_paras);
         } else if (event->services[m].servie_id == EN_IOTA_EVENT_DEVICE_LOG) {
@@ -1362,21 +1454,46 @@ static void OnEventsDownMemFree(EN_IOTA_EVENT *event, int services_count)
 
 static void setOtaCallback(char *objectDeviceId, EN_IOTA_MQTT_MSG_INFO *mqtt_msg_info, EN_IOTA_SERVICE_EVENT *message)
 {
-    if (message->event_type == EN_IOTA_EVENT_VERSION_QUERY) {
-        if (tagOtaOps.onDeviceVersionUp) {
-            tagOtaOps.onDeviceVersionUp(objectDeviceId);
-        }
-    } 
-    if ((message->event_type == EN_IOTA_EVENT_FIRMWARE_UPGRADE) ||
-        (message->event_type == EN_IOTA_EVENT_SOFTWARE_UPGRADE) ||
-        (message->event_type == EN_IOTA_EVENT_FIRMWARE_UPGRADE_V2) ||
-        (message->event_type == EN_IOTA_EVENT_SOFTWARE_UPGRADE_V2)) {
-        
-        if (tagOtaOps.onUrlResponse) {
-            tagOtaOps.onUrlResponse(objectDeviceId, message->event_type, message->ota_paras);
-        }
+    switch (message->event_type) {
+        case EN_IOTA_EVENT_VERSION_QUERY:
+            if (tagOtaOps.onDeviceVersionUp) {
+                tagOtaOps.onDeviceVersionUp(objectDeviceId);
+            }
+            break;
 
+        case EN_IOTA_EVENT_SOFTWARE_UPGRADE:
+        case EN_IOTA_EVENT_FIRMWARE_UPGRADE:
+        case EN_IOTA_EVENT_SOFTWARE_UPGRADE_V2:
+        case EN_IOTA_EVENT_FIRMWARE_UPGRADE_V2:
+            if (tagOtaOps.onUrlResponse) {
+                tagOtaOps.onUrlResponse(objectDeviceId, message->event_type, message->ota_paras);
+            }
+            break;
+        case EN_IOTA_EVENT_MODULE_VERSION_UP:
+            if (tagModuleOtaOps.onVersionUpReport) {
+                tagModuleOtaOps.onVersionUpReport(objectDeviceId, message->module_report_paras);
+            }
+            break;
+        case EN_IOTA_EVENT_MODULE_URL_RESPONSE:
+            if (tagModuleOtaOps.onUrlResponse) {
+                tagModuleOtaOps.onUrlResponse(objectDeviceId, message->module_upgrade_paras);
+            }
+            break;
+        case EN_IOTA_EVENT_MODULE_PROGRESS_RESPONSE:
+            if (tagModuleOtaOps.onProgressReport) {
+                tagModuleOtaOps.onProgressReport(objectDeviceId, message->module_report_paras);
+            }
+            break;
+        case EN_IOTA_EVENT_MODULE_PACKAGE_RESPONSE:
+            if (tagModuleOtaOps.onGetPackage) {
+                tagModuleOtaOps.onGetPackage(objectDeviceId, message->module_get_package_paras);
+            }
+            break;
+        default:
+            
+            break;
     }
+   
 }
 
 static int OnEventsDownArrivedJosnSplicing(EN_IOTA_EVENT *event, JSON *services, const char *message, int services_count)
@@ -1897,5 +2014,11 @@ void SetEvenTunnelManagerCallback(EVENT_CALLBACK_HANDLER_SPECIFY callbackHandler
 void SetEvenFileManagerCallback(EVENT_CALLBACK_HANDLER_SPECIFY callbackHandler)
 {
     tagEventsOps.onFileManager = callbackHandler;
+    MqttBase_SetMessageArrivedCallback(OnMessageArrived);
+}
+
+void SetEvenModuleOtaCallback(TagModuleOtaOps callbackHandler)
+{
+    tagModuleOtaOps = callbackHandler;
     MqttBase_SetMessageArrivedCallback(OnMessageArrived);
 }
